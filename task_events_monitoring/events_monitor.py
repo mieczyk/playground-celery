@@ -1,83 +1,77 @@
-# Execute worker: celery -A prefetch_limit_worker_setting worker --level=INFO -E
+# Execute worker: celery -A task_events_monitoring.tasks worker --level=INFO -E
 # REMEMBER: In order to make worker to send events the -E (--task-event) option
 # must be used ('worker_send_task_events' setting is disabled by default).
 # 'task_send_sent_event' setting (since version 2.2) = If enabled, a "task-sent" event will be
 # sent for every task so tasks can be tracked before they’re consumed by a worker.
 
-import time
 from celery import Celery
 
-# Use RabbitMQ with default credentials as a broker.
-app = Celery('task_events', broker='pyamqp://guest@localhost')
-app.conf.task_send_sent_event = True
+class CeleryEventsHandler:
+    def __init__(self, celery_app):
+        self._app = celery_app
+        self._state = celery_app.events.State()
 
-# Define a long running task (1 minute)
-@app.task
-def long_running_task():
-    start = time.perf_counter()
-    time.sleep(60)
-    end = time.perf_counter()
+    def _print_event(self, event):
+        print('[{}]'.format(event['type'].upper()))
+        print('{}\n'.format(event))
 
-    return '[long_running_task] Execution time: {0:.4f}s'.format(end-start)
+    def _event_handler(handler):
+        def wrapper(self, event):
+            self._print_event(event)
+            self._state.event(event)
+            
+            handler(self, event)
+        return wrapper
 
-# Define a very fast task (0.05 second)
-@app.task
-def fast_task():
-    start = time.perf_counter()
-    time.sleep(0.05)
-    end = time.perf_counter()
-
-    return '[fask_task] Execution time: {0:.4f}s'.format(end-start)
-
-# Monitor Celery activities
-def celery_monitor():
-    # app.events.State is a convenient in-memory representation of tasks 
-    # and workers in the cluster that’s updated as events come in.
-    state = app.events.State()
-
-    def on_task_sent(event):
-        state.event(event)
-        task = state.tasks.get(event['uuid'])
-        print(type(event))
-        print(event)
-        print(task.queue)
-
-    def on_task_received(event):
+    @_event_handler
+    def _on_task_sent(self, event):
         pass
 
-    def on_task_started(event):
+    @_event_handler
+    def _on_task_received(self, event):
         pass
 
-    def on_task_succeeded(event):
-        state.event(event)
-        # task name is sent only with -received event, and state
-        # will keep track of this for us.
-        task = state.tasks.get(event['uuid'])
-        print('TASK SUCCEEDED: %s[%s] %s' % (
-            task.name, task.uuid, task.info(),))
-    
-    def on_task_failed(event):
-        pass
+    @_event_handler
+    def _on_task_started(self, event):
+         pass
 
-    def on_task_rejected(event):
-        pass
+    @_event_handler
+    def _on_task_succeeded(self, event):
+         pass
 
-    def on_task_retried(event):
-        pass
+    @_event_handler
+    def _on_task_failed(self, event):
+         pass
 
-    def on_task_event(event):
-        state.event(event)
-        print(event)
-        #task = state.tasks.get(event['uuid'])
-        #print(task.info())
+    @_event_handler
+    def _on_task_rejected(self, event):
+         pass
 
-    with app.connection() as connection:
-        recv = app.events.Receiver(connection, handlers={
-                'task-sent': on_task_sent,
-                'task-succeeded': on_task_succeeded,
-                '*': state.event, # Will catch ALL events, including worker-heartbeat
-        })
-        recv.capture(limit=None, timeout=None, wakeup=True)
+    @_event_handler
+    def _on_task_revoked(self, event):
+         pass
+
+    @_event_handler
+    def _on_task_retried(self, event):
+         pass
+
+    def start_listening(self):
+        with self._app.connection() as connection:
+            recv = self._app.events.Receiver(connection, handlers={
+                'task-sent': self._on_task_sent,
+                'task-received': self._on_task_received,
+                'task-started': self._on_task_started,
+                'task-succeeded': self._on_task_succeeded,
+                'task-failed': self._on_task_failed,
+                'task-rejected': self._on_task_rejected,
+                'task-revoked': self._on_task_revoked,
+                'task-retried': self._on_task_retried
+            })
+            recv.capture(limit=None, timeout=None, wakeup=True)
 
 if __name__ == '__main__':
-    celery_monitor()
+    # Use RabbitMQ with default credentials as a broker.
+    app = Celery('task_events_monitoring.tasks', broker='pyamqp://guest@localhost')
+    
+    events_handler = CeleryEventsHandler(app)
+    events_handler.start_listening()

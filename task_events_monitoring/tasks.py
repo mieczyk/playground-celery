@@ -1,5 +1,3 @@
-# celery -A task_events_monitoring.tasks worker -l debug
-
 import requests
 from celery import Celery
 
