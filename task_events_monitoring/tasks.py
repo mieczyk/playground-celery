@@ -1,3 +1,7 @@
+# Execute worker: celery -A task_events_monitoring.tasks worker --loglevel=INFO -E
+# REMEMBER: In order to make worker to send events, the -E (--task-event) option
+# must be used ('worker_send_task_events' setting is disabled by default).
+
 import requests
 from urllib.parse import urlparse
 from celery import Celery
