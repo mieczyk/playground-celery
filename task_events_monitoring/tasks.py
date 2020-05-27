@@ -95,10 +95,10 @@ def store_data(data):
         
         f.write('=== LINKS:\n')
         for link in data['links']:
-            f.write(link + '\n')
+            f.write(str(link) + '\n')
         
         f.write('=== IMAGES:\n')
         for img in data['images']:
-            f.write(img + '\n')
+            f.write(str(img) + '\n')
     
     print('Fetched data saved to file {0}'.format(filename))
