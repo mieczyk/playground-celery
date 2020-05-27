@@ -47,7 +47,9 @@ class CeleryEventsHandler:
         print('Root ID: {}'.format(task.root_id))
         print('Parent: {}'.format(task.parent))
         print('Parent ID: {}'.format(task.parent_id))
-        print('Children: {}'.format(task.children))
+        print('Children:')
+        for child in task.children:
+            print('\t{}\n'.format(str(child)))
         print('\n')
 
     def _event_handler(handler):
